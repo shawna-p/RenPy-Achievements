@@ -84,6 +84,7 @@ init -50 python:
         ## A list of all the achievements that exist in this game,
         ## to loop over in the achievements screen.
         all_achievements = [ ]
+        achievement_dict = dict()
         def __init__(self, name, id=None, description=None, unlocked_image=None,
                 locked_image=None, stat_max=None, stat_modulo=0, hidden=False,
                 stat_update_percent=1, hide_description=None):
@@ -114,6 +115,8 @@ init -50 python:
 
             # Add to list of all achievements
             self.all_achievements.append(self)
+            # Add to the dictionary for a quick lookup
+            self.achievement_dict[self.id] = self
 
             # Register with backends
             achievement.register(self.id, stat_max=stat_max, stat_modulo=stat_modulo)
@@ -183,17 +186,12 @@ init -50 python:
             hidden or not.
             """
             if self.hide_description and not self.has():
-                return _("???{#hidden_achievement_description}")
+                if self.hide_description is True:
+                    return _("???{#hidden_achievement_description}")
+                else:
+                    return self.hide_description
             else:
                 return self._description
-
-        def AddProgress(self, amount=1):
-            """Add amount of progress to this achievement."""
-            return Function(self.add_progress, amount=amount)
-
-        def Progress(self, amount):
-            """Set this achievement's progress to amount."""
-            return Function(self.progress, amount)
 
         @property
         def stat_progress(self):
@@ -227,6 +225,9 @@ init -50 python:
                 self.achievement_popup()
                 # Save the timestamp
                 self._timestamp = time.time()
+                # Callback
+                if myconfig.ACHIEVEMENT_CALLBACK is not None:
+                    renpy.run(myconfig.ACHIEVEMENT_CALLBACK, self)
             # Double check achievement sync
             achievement.sync()
             return x
@@ -277,6 +278,14 @@ init -50 python:
             renpy.show_screen('achievement_popup', a=self, tag=tag, num=i,
                 _tag=tag)
 
+        def AddProgress(self, amount=1):
+            """Add amount of progress to this achievement."""
+            return Function(self.add_progress, amount=amount)
+
+        def Progress(self, amount):
+            """Set this achievement's progress to amount."""
+            return Function(self.progress, amount)
+
         def Toggle(self):
             """
             A developer action to easily toggle the achieved status
@@ -294,6 +303,23 @@ init -50 python:
             return Function(self.grant)
 
         @classmethod
+        def reset(self):
+            """
+            A class method which resets all achievements and clears all their
+            progress.
+            """
+            for achievement in self.all_achievements:
+                achievement.clear()
+
+        @classmethod
+        def Reset(self):
+            """
+            A class method which resets all achievements and clears all their
+            progress. This is a button action rather than a function.
+            """
+            return Function(self.reset)
+
+        @classmethod
         def num_earned(self):
             """
             A class property which returns the number of unlocked achievements.
@@ -308,12 +334,138 @@ init -50 python:
             return len(self.all_achievements)
 
 
+    class LinkedAchievement():
+        """
+        A class which can be used as part of an achievement callback to
+        trigger an achievement when some subset of achievements is unlocked.
+
+        Attributes:
+        -----------
+        links : dict
+            A dictionary of the form {achievement.id : [list of final
+            achievement ids]}. This is a reverse of the dictionary passed in
+            to the constructor and is used to look up what final achievements
+            are tied to a given achievement.
+        final_to_list : dict
+            A dictionary of the form {final_achievement.id : [list of
+            achievement ids to check]}. This is the same as the dictionary
+            passed in to the constructor, and is used to look up what
+            achievements are needed to unlock a given final achievement.
+        unlock_after_all : string
+            If this is set to an achievement ID, then that achievement is
+            unlocked after all other achievements are unlocked.
+        """
+        def __init__(self, **links):
+            """
+            Create a LinkedAchievement to be used as a callback.
+
+            Parameters:
+            ----------
+            links : dict
+                A dictionary of the form {final_achievement.id : [list of
+                achievement ids to check]}. When all of the achievements in the
+                list are unlocked, the final achievement is unlocked.
+            """
+            ## links comes in the form of
+            ## {final_achievement.id : [list of achievement ids to check]}
+            self.links = dict()
+
+            values = links.values()
+            if len(values) == 1 and 'all' in values:
+                ## Special case for an achievement that's achieved after
+                ## getting all achievements
+                self.unlock_after_all = ''.join(links.keys())
+                self.final_to_list = links
+                return
+            else:
+                self.unlock_after_all = False
+
+            ## Reverse-engineer a dictionary which corresponds to the things
+            ## that are checked, and what they tie back to.
+            for final_achievement, check_achievements in links.items():
+                for check_achievement in check_achievements:
+                    if check_achievement == final_achievement:
+                        continue
+                    if check_achievement not in links:
+                        self.links[check_achievement] = [final_achievement]
+                    else:
+                        self.links[check_achievement].append(final_achievement)
+
+            self.final_to_list = links
+
+        def __call__(self, the_achievement):
+            """
+            A method which is called when an achievement is unlocked.
+            It checks if the achievement is part of a list of achievements
+            which are needed to unlock a given final achievement, and if the
+            conditions needed to unlock that final achievement are met.
+            If so, it grants that achievement.
+
+            Parameters:
+            -----------
+            the_achievement : Achievement
+                The achievement which was just granted.
+            """
+            if self.unlock_after_all:
+                ## This unlocks after all achievements are earned
+                if all([a.has() for a in Achievement.all_achievements
+                        if a.id != self.unlock_after_all]):
+                    fa = Achievement.achievement_dict.get(self.unlock_after_all)
+                    if fa is not None:
+                        fa.grant()
+                return
+
+            ## Find which final achievements this is attached to
+            final_achievements = self.links.get(the_achievement.id, None)
+            if not final_achievements:
+                return
+
+            ## Otherwise, see if this was the last achievement which was needed
+            ## to unlock a given final_achievement.
+            for final_achievement in final_achievements:
+                lst = self.final_to_list.get(final_achievement, None)
+                if lst is None:
+                    continue
+                ## Check if all the achievements in the list are unlocked
+                if all([achievement.has(a) for a in lst]):
+                    fa = Achievement.achievement_dict.get(final_achievement)
+                    if fa is not None:
+                        fa.grant()
+            return
+
+## Note: DO NOT change these configuration values in this block! See
+## `achievements.rpy` for how to change them. This is just for setup so they
+## exist in the game, and then you can modify them with `define` in a different
+## file.
+init -999 python in myconfig:
+    _constant = True
+    ## This is a configuration value which determines whether the in-game
+    ## achievement popup should appear when Steam is detected. Since Steam
+    ## already has its own built-in popup, you may want to set this to False
+    ## if you don't want to show the in-game popup alongside it.
+    ## The in-game popup will still work on non-Steam builds, such as builds
+    ## released DRM-free on itch.io.
+    INGAME_POPUP_WITH_STEAM = True
+    ## The length of time the in-game popup spends hiding itself (see
+    ## transform achievement_popout in achievements.rpy).
+    ACHIEVEMENT_HIDE_TIME = 1.0
+    ## True if the game should show in-game achievement popups when an
+    ## achievement is earned. You can set this to False if you just want an
+    ## achievement gallery screen and don't want any popups.
+    SHOW_ACHIEVEMENT_POPUPS = True
+    ## A callback, or list of callbacks, which are called when an achievement
+    ## is granted. It is called with one argument, the achievement which
+    ## was granted. It is only called if the achievement has not previously
+    ## been earned.
+    ACHIEVEMENT_CALLBACK = None
+
 ## Track the time each achievement was earned at
 default persistent.achievement_timestamp = dict()
 ## Tracks the number of onscreen achievements, for offsetting when
 ## multiple achievements are earned at once
 default onscreen_achievements = dict()
-
+## Required for older Ren'Py versions so the vpgrid doesn't complain about
+## uneven numbers of achievements, but True by default in later Ren'Py versions.
 define config.allow_underfull_grids = True
 
 # This, coupled with the timer on the popup screen, ensures that the achievement
