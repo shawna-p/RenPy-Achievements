@@ -35,23 +35,34 @@
 ################################################################################
 ## CONFIGURATION
 ################################################################################
-init python in myconfig:
-    _constant = True
+## This is a configuration value which determines whether the in-game
+## achievement popup should appear when Steam is detected. Since Steam
+## already has its own built-in popup, you may want to set this to False
+## if you don't want to show the in-game popup alongside it.
+## The in-game popup will still work on non-Steam builds, such as builds
+## released DRM-free on itch.io.
+define myconfig.INGAME_POPUP_WITH_STEAM = True
+## The length of time the in-game popup spends hiding itself (see
+## transform achievement_popout below).
+define myconfig.ACHIEVEMENT_HIDE_TIME = 1.0
+## True if the game should show in-game achievement popups when an
+## achievement is earned. You can set this to False if you just want an
+## achievement gallery screen and don't want any popups.
+define myconfig.SHOW_ACHIEVEMENT_POPUPS = True
 
-    ## This is a configuration value which determines whether the in-game
-    ## achievement popup should appear when Steam is detected. Since Steam
-    ## already has its own built-in popup, you may want to set this to False
-    ## if you don't want to show the in-game popup alongside it.
-    ## The in-game popup will still work on non-Steam builds, such as builds
-    ## released DRM-free on itch.io.
-    INGAME_POPUP_WITH_STEAM = True
-    ## The length of time the in-game popup spends hiding itself (see
-    ## transform achievement_popout below).
-    ACHIEVEMENT_HIDE_TIME = 1.0
-    ## True if the game should show in-game achievement popups when an
-    ## achievement is earned. You can set this to False if you just want an
-    ## achievement gallery screen and don't want any popups.
-    SHOW_ACHIEVEMENT_POPUPS = True
+## A callback, or list of callbacks, which are called when an achievement
+## is granted. It is called with one argument, the achievement which
+## was granted. It is only called if the achievement has not previously
+## been earned. See the README for more information.
+define myconfig.ACHIEVEMENT_CALLBACK = [
+    ## This first example is an achievement which unlocks after two other
+    ## achievements have been granted ("hidden_achievement" and
+    ## "hidden_description").
+    LinkedAchievement(hidden3=['hidden_achievement', 'hidden_description']),
+    ## The second example is an achievement which unlocks after all achievements
+    ## have been granted. This is a special case.
+    LinkedAchievement(platinum_achievement='all'),
+]
 
 init python:
     ## This is a built-in configuration value. It will set the position of
@@ -156,6 +167,32 @@ define hidden_description = Achievement(
     hide_description=True, ## The important bit that hides only the description
 )
 
+## Example 5 ###################################################################
+## This achievement unlocks automatically when the other two hidden achievements
+## are unlocked. This is set up via myconfig.ACHIEVEMENT_CALLBACK earlier in
+## the file.
+define hidden_double_unlock = Achievement(
+    name=_("You found it"),
+    id="hidden3",
+    description=_("This achievement unlocks automatically when the other two hidden achievements are unlocked."),
+    unlocked_image=Transform("gui/window_icon.png", matrixcolor=ContrastMatrix(0.0)),
+    hidden=True,
+    ## Besides just setting hide_description=True to set it to "???", you can
+    ## optionally provide your own custom description here, which is only
+    ## shown until the achievement is unlocked.
+    hide_description=_("Try unlocking the other two hidden achievements before this one."),
+)
+## Example 6 ###################################################################
+## This -2 makes sure it's declared before the other achievements. This is
+## so it shows up first in the list even though it's defined all the way down
+## here.
+define -2 all_achievements = Achievement(
+    name=_("Platinum Achievement"),
+    id="platinum_achievement",
+    description=_("Congrats! You unlocked every achievement!"),
+    unlocked_image=Transform("gui/window_icon.png", matrixcolor=BrightnessMatrix(1.0)),
+    hide_description=_("Get all other achievements."),
+)
 
 ################################################################################
 ## SCREENS
@@ -321,6 +358,12 @@ screen achievement_gallery():
     label __("Achievements: ") + "{earned}/{total}".format(
             earned=Achievement.num_earned(), total=Achievement.num_total()):
         text_size 52 xalign 0.5 text_color "#f93c3e" top_padding 15
+
+    ## This is an example of a button you might have during development which
+    ## will reset all achievement progress at once. It can also be provided
+    ## to players if you'd like them to be able to reset their achievement
+    ## progress.
+    # textbutton "Reset All" action Achievement.Reset() align (1.0, 0.0)
 
 style achievement_button:
     size_group 'achievement'
