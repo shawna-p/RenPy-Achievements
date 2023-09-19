@@ -59,6 +59,7 @@ The Achievement class takes the following parameters:
     `hidden=True, hide_description=False` -> The name is ???, the description is not hidden.
     `hidden=False, hide_description=True` -> The name is not hidden, the description is ???
     `hidden=True` -> the name and description are ???
+    You can also set `hide_description` to a string, in which case that string will be shown as the description before the achievement has been granted e.g. `hide_description=_("A certain someone wants to see you...")`
 
 ### Regular Methods
 
@@ -82,7 +83,7 @@ The Achievement class takes the following parameters:
     This method will grant the achievement to the player e.g. `sample_achievement.grant()`. If a player has already earned this achievement, it does nothing.
 
 `has`
-    This method returns True if this achievement has been granted to the player, and False if not e.g. `sample.achievement.has()`
+    This method returns True if this achievement has been granted to the player, and False if not e.g. `sample_achievement.has()`
 
 `num_earned`
     This is a class method which can be invoked using the Achievement class name instead of a specific Achievement variable. It returns the number of earned achievements in total e.g. `Achievement.num_earned()`.
@@ -90,6 +91,9 @@ The Achievement class takes the following parameters:
 `num_total`
     This is a class method which can be invoked using the Achievement class name instead of a specific Achievement variable. It returns the total number of achievements declared in the game e.g. `Achievement.num_total()`.
     You can see both this and `Achievement.num_earned()` used in the header of the `achievement_gallery` screen in `achievements.rpy`.
+
+`reset`
+    This is a class method which can be invoked using the Achievement class name instead of a specific Achievement variable. It resets the progress of all achievements in the game e.g. `Achievement.reset()`
 
 ### Button Actions
 
@@ -104,6 +108,55 @@ The Achievement class takes the following parameters:
 
 `Toggle`
     This is a special method intended to be used for testing. If an achievement has been granted, clicking a button with this Toggle method will clear it from the unlocked achievements. If it has not been granted, clicking the button will grant it. e.g. `sample_achievement.Toggle()`
+
+`Reset`
+    This is a special method which can be used to reset the progress of all achievements at once. It is a class method, and is thus always called like `action Achievement.Reset()`.
+
+## Configuration Values
+
+Besides the Achievement class, there are a few configuration values you can set up to further customize the behaviour of achievements. You can find these at the top of `achievements.rpy`.
+
+`myconfig.INGAME_POPUP_WITH_STEAM`
+    If True, the default, the in-game popup will appear even when Steam integration is detected. Since Steam has its own built-in popup, you may want to set this to False if you don't want two popups on the screen. If this is False, the in-game popup will still work on non-Steam builds, such as builds released DRM-free on itch.io.
+
+`myconfig.ACHIEVEMENT_HIDE_TIME`
+    This should be set to the length, in seconds, that the in-game popup spends hiding itself. See `transform achievement_popup` for where this is used.
+
+`myconfig.SHOW_ACHIEVEMENT_POPUPS`
+    If True, the default, an in-game popup screen is displayed when getting an achievement. You may also set this to False to disable the in-game popup altogether for all builds if you just want the other Achievement features.
+
+`myconfig.ACHIEVEMENT_CALLBACK`
+    A callback, or a list of callbacks, which are called when an achievement is granted. The callback is called with one argument, the achievement which was granted. It is only called if the achievement has not previously been earned.
+    You can use this alongside the included `LinkedAchievement` class to set up achievements which automatically unlock when other achievements are unlocked. This is explained in further detail below.
+
+`achievement.steam_position`
+    This is a configuration value provided by Ren'Py itself. It will set the position of the Steam popup and can be set to one of: `"top_left"`, `"top_right"`, `"bottom_left"`, or `"bottom_right"`. If you are using the built-in achievement popups of this system alongside Steam's, you may want to set this to ensure the popups do not appear in the same location.
+
+## LinkedAchievement
+
+LinkedAchievement is a special class designed to be used alongside `myconfig.ACHIEVEMENT_CALLBACK` which provides an easy way of adding a callback that will automatically unlock a specific achievement when some other subset of achievements have been unlocked.
+
+### Platinum Achievements
+
+There are two main ways you might use `LinkedAchievement` as part of `myconfig.ACHIEVEMENT_CALLBACK` - first is for a "platinum" achievement, which unlocks when all other achievements have been granted. This special case can be handled via:
+
+```renpy
+define myconfig.ACHIEVEMENT_CALLBACK = LinkedAchievement(platinum_achievement="all")
+```
+
+In this case, `platinum_achievement` must be the ID field of the "platinum" achievement (which must be declared as an Achievement).
+
+### Connected Achievements
+
+The second way you may want to use LinkedAchievement is to trigger an achievement when some subset of other Achievements have been granted. Using the LinkedAchievement class, this looks like:
+
+```renpy
+define myconfig.ACHIEVEMENT_CALLBACK = [
+    LinkedAchievement(all_endings_achievement=["good_end", "bad_end", "normal_end"]),
+]
+```
+
+In this example, `all_endings_achievement` is the ID of the achievement which will be unlocked when the other provided achievements are granted, and `"good_end"`, `"bad_end"`, and `"normal_end"` are the IDs of the achievements which, when all granted, will trigger the provided achievement.
 
 ## Final Notes
 
