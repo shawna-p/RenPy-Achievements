@@ -246,6 +246,11 @@ init -50 python:
             if not has_achievement and self.has():
                 # First time this was granted
                 self.achievement_popup()
+                # Save the timestamp
+                self._timestamp = time.time()
+                # Callback
+                if myconfig.ACHIEVEMENT_CALLBACK is not None:
+                    renpy.run(myconfig.ACHIEVEMENT_CALLBACK, self)
             return x
 
         def achievement_popup(self):
