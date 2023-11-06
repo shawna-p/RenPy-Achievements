@@ -49,6 +49,13 @@ define myconfig.ACHIEVEMENT_HIDE_TIME = 1.0
 ## achievement is earned. You can set this to False if you just want an
 ## achievement gallery screen and don't want any popups.
 define myconfig.SHOW_ACHIEVEMENT_POPUPS = True
+## This can be set to a sound that plays when the achievement popup appears.
+## None does not play a sound.
+define myconfig.ACHIEVEMENT_SOUND = None # "audio/sfx/achievement.ogg"
+## If the sound plays, this sets the channel it will play on. The audio
+## channel plays on the sfx mixer, and can play overlapping sounds if multiple
+## achievements are earned at once.
+define myconfig.ACHIEVEMENT_CHANNEL = "audio"
 
 ## A callback, or list of callbacks, which are called when an achievement
 ## is granted. It is called with one argument, the achievement which

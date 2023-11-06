@@ -129,6 +129,12 @@ Besides the Achievement class, there are a few configuration values you can set 
     A callback, or a list of callbacks, which are called when an achievement is granted. The callback is called with one argument, the achievement which was granted. It is only called if the achievement has not previously been earned.
     You can use this alongside the included `LinkedAchievement` class to set up achievements which automatically unlock when other achievements are unlocked. This is explained in further detail below.
 
+`myconfig.ACHIEVEMENT_SOUND`
+    This should be given the path to an audio file which will play when the achievement is granted, or `None` (the default) if no sound should play. This sound only plays if in-game popups are enabled.
+
+`myconfig.ACHIEVEMENT_CHANNEL`
+    By default, the achievement sound effect is set to play on the `audio` channel. You can set this to the string name of another channel to play on that channel instead.
+
 `achievement.steam_position`
     This is a configuration value provided by Ren'Py itself. It will set the position of the Steam popup and can be set to one of: `"top_left"`, `"top_right"`, `"bottom_left"`, or `"bottom_right"`. If you are using the built-in achievement popups of this system alongside Steam's, you may want to set this to ensure the popups do not appear in the same location.
 

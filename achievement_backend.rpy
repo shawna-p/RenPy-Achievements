@@ -86,7 +86,7 @@ init -50 python:
         all_achievements = [ ]
         achievement_dict = dict()
         def __init__(self, name, id=None, description=None, unlocked_image=None,
-                locked_image=None, stat_max=None, stat_modulo=0, hidden=False,
+                locked_image=None, stat_max=None, stat_modulo=None, hidden=False,
                 stat_update_percent=1, hide_description=None):
 
             self._name = name
@@ -119,7 +119,8 @@ init -50 python:
             self.achievement_dict[self.id] = self
 
             # Register with backends
-            achievement.register(self.id, stat_max=stat_max, stat_modulo=stat_modulo)
+            achievement.register(self.id, stat_max=stat_max,
+                stat_modulo=stat_modulo or None)
 
         def get_timestamp(self, format="%b %d, %Y @ %I:%M %p"):
             """
@@ -280,6 +281,10 @@ init -50 python:
                     break
             # Generate a random tag for this screen
             tag = get_random_screen_tag(6)
+            ## Play a sound, if provided
+            if myconfig.ACHIEVEMENT_SOUND:
+                renpy.music.play(myconfig.ACHIEVEMENT_SOUND,
+                    channel=myconfig.ACHIEVEMENT_CHANNEL)
             renpy.show_screen('achievement_popup', a=self, tag=tag, num=i,
                 _tag=tag)
 
@@ -463,6 +468,9 @@ init -999 python in myconfig:
     ## was granted. It is only called if the achievement has not previously
     ## been earned.
     ACHIEVEMENT_CALLBACK = None
+    ## A sound to play when the achievement is granted
+    ACHIEVEMENT_SOUND = None
+    ACHIEVEMENT_CHANNEL = "audio"
 
 ## Track the time each achievement was earned at
 default persistent.achievement_timestamp = dict()
