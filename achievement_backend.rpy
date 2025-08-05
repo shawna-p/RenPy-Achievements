@@ -1,6 +1,6 @@
 ################################################################################
 ##
-## Achievements for Ren'Py by Feniks (feniksdev.itch.io / feniksdev.com)
+## Achievements for Ren'Py by Feniks (feniksdev.itch.io / feniksdev.com) v1.5
 ##
 ################################################################################
 ## This file contains code for an achievement system in Ren'Py. It is designed
@@ -16,8 +16,9 @@
 ## Leave a comment on the tool page on itch.io or an issue on the GitHub
 ## if you run into any issues.
 ################################################################################
-init -50 python:
+init -500 python in custom_achievements:
     import datetime, time
+    from store import achievement, persistent, SelectedIf, If, Function, myconfig, config
     from re import sub as re_sub
 
     TAG_ALPHABET = "abcdefghijklmnopqrstuvwxyz"
@@ -25,7 +26,7 @@ init -50 python:
         """Generate a random k-letter word out of alphabet letters."""
 
         # Shuffle the list and pop k items from the front
-        alphabet = list(store.TAG_ALPHABET)
+        alphabet = list(TAG_ALPHABET)
         renpy.random.shuffle(alphabet)
         ## Add the time onto the end so there are no duplicates
         return ''.join(alphabet[:k] + [str(time.time())])
@@ -70,16 +71,31 @@ init -50 python:
             game progress stat, you only wanted to show updates every time the
             player got through a quarter of the chapters. In this case,
             stat_modulo would be 6 (24//4).
-        hidden : bool
-            True if this achievement's description and name should be hidden
-            from the player.
+        hide_name : bool
+            True if this achievement's name should be hidden. May also be set to
+            a string, which will be shown as the name before the achievement
+            is unlocked.
         hide_description : bool
             True if this achievement's description should be hidden from the
-            player. Can be set separately from hidden, e.g. with hidden=True
-            and hide_description=False, the player will see the name but not
-            the description.
+            player. May also be set to a string, which will be shown as the
+            description before the achievement is unlocked.
         timestamp : Datetime
             The time this achievement was unlocked at.
+        progress_set : set
+            A set which can hold unique progress values for this achievement,
+            which may be used to track progress.
+        show_progress_bar : bool
+            If True, a progress bar will be shown in the achievement gallery
+            screen for this achievement. If False, it will not be shown (though
+            you can still track progress using the progress methods).
+        kwargs : dict
+            A dictionary of additional keyword arguments which can be used
+            to pass additional information to the achievement backend.
+        hidden : bool
+            Retained for compatibility, but deprecated. hide_name and
+            hide_description should be used instead.
+            True if this achievement's description and name should be hidden
+            from the player.
         """
         ## A list of all the achievements that exist in this game,
         ## to loop over in the achievements screen.
@@ -87,7 +103,8 @@ init -50 python:
         achievement_dict = dict()
         def __init__(self, name, id=None, description=None, unlocked_image=None,
                 locked_image=None, stat_max=None, stat_modulo=None, hidden=False,
-                stat_update_percent=1, hide_description=None):
+                stat_update_percent=1, hide_description=None,
+                hide_name=None, **kwargs):
 
             self._name = name
             # Try to sanitize the name for an id, if possible
@@ -107,7 +124,12 @@ init -50 python:
                 ## So if it updates every 10%, then stat_max / stat_modulo = 10
                 self.stat_modulo = int(stat_max * (stat_update_percent / 100.0))
 
+
             self.hidden = hidden
+            if hide_name is None:
+                self.hide_name = hidden
+            else:
+                self.hide_name = hide_name
             if hide_description is None:
                 self.hide_description = hidden
             else:
@@ -117,6 +139,9 @@ init -50 python:
             self.all_achievements.append(self)
             # Add to the dictionary for a quick lookup
             self.achievement_dict[self.id] = self
+
+            self.show_progress_bar = kwargs.pop('show_progress_bar', bool(self.stat_max))
+            self.kwargs = kwargs
 
             # Register with backends
             achievement.register(self.id, stat_max=stat_max,
@@ -135,8 +160,8 @@ init -50 python:
 
         @property
         def _timestamp(self):
-            if store.persistent.achievement_timestamp is not None:
-                return store.persistent.achievement_timestamp.get(self.id, None)
+            if persistent.achievement_timestamp is not None:
+                return persistent.achievement_timestamp.get(self.id, None)
             else:
                 return None
 
@@ -158,8 +183,8 @@ init -50 python:
         @_timestamp.setter
         def _timestamp(self, value):
             """Set the timestamp for this achievement."""
-            if store.persistent.achievement_timestamp is not None:
-                store.persistent.achievement_timestamp[self.id] = value
+            if persistent.achievement_timestamp is not None:
+                persistent.achievement_timestamp[self.id] = value
 
         @property
         def idle_img(self):
@@ -175,8 +200,11 @@ init -50 python:
             Returns the name of the achievement based on whether it's
             hidden or not.
             """
-            if self.hidden and not self.has():
-                return _("???{#hidden_achievement_name}")
+            if self.hide_name and not self.has():
+                if self.hide_name is True:
+                    return myconfig.HIDDEN_ACHIEVEMENT_NAME
+                else:
+                    return self.hide_name
             else:
                 return self._name
 
@@ -188,7 +216,7 @@ init -50 python:
             """
             if self.hide_description and not self.has():
                 if self.hide_description is True:
-                    return _("???{#hidden_achievement_description}")
+                    return myconfig.HIDDEN_ACHIEVEMENT_DESCRIPTION
                 else:
                     return self.hide_description
             else:
@@ -199,6 +227,24 @@ init -50 python:
             """Return this achievement's progress stat."""
             return self.get_progress()
 
+        @property
+        def progress_set(self):
+            """
+            Return the set of progress values for this achievement.
+            If it doesn't exist, create it.
+            """
+            return persistent.achievement_sets.setdefault(self.id, set())
+
+        def add_set_progress(self, value):
+            """
+            Add a value to the progress set for this achievement.
+            """
+            if value not in self.progress_set:
+                self.progress_set.add(value)
+                # Update the progress
+                self.progress(len(self.progress_set))
+            return self.stat_progress
+
         def add_progress(self, amount=1):
             """
             Increment the progress towards this achievement by amount.
@@ -208,6 +254,11 @@ init -50 python:
         ## Wrappers for various achievement functionality
         def clear(self):
             """Clear this achievement from memory."""
+            ## Remove this ID from the timestamps and achievement sets
+            if persistent.achievement_timestamp is not None:
+                persistent.achievement_timestamp.pop(self.id, None)
+            if persistent.achievement_sets is not None:
+                persistent.achievement_sets.pop(self.id, None)
             return achievement.clear(self.id)
 
         def get_progress(self):
@@ -276,8 +327,8 @@ init -50 python:
 
             # Otherwise, show the achievement screen
             for i in range(10):
-                if store.onscreen_achievements.get(i, None) is None:
-                    store.onscreen_achievements[i] = True
+                if onscreen_achievements.get(i, None) is None:
+                    onscreen_achievements[i] = True
                     break
             # Generate a random tag for this screen
             tag = get_random_screen_tag(6)
@@ -471,15 +522,25 @@ init -999 python in myconfig:
     ## A sound to play when the achievement is granted
     ACHIEVEMENT_SOUND = None
     ACHIEVEMENT_CHANNEL = "audio"
+    ## The text that's shown when an achievement's name or description
+    ## is hidden.
+    HIDDEN_ACHIEVEMENT_NAME = _("???{#hidden_achievement_name}")
+    HIDDEN_ACHIEVEMENT_DESCRIPTION = _("???{#hidden_achievement_description}")
 
 ## Track the time each achievement was earned at
 default persistent.achievement_timestamp = dict()
+## A dictionary of "progress sets" for achievements, which can be used to track
+## achievement progress for an individual achievement.
+default persistent.achievement_sets = dict()
 ## Tracks the number of onscreen achievements, for offsetting when
 ## multiple achievements are earned at once
-default onscreen_achievements = dict()
+default custom_achievements.onscreen_achievements = dict()
 ## Required for older Ren'Py versions so the vpgrid doesn't complain about
 ## uneven numbers of achievements, but True by default in later Ren'Py versions.
 define config.allow_underfull_grids = True
+
+init -499 python:
+    from store.custom_achievements import Achievement, LinkedAchievement
 
 # This, coupled with the timer on the popup screen, ensures that the achievement
 # is properly hidden before another achievement can be shown in that "slot".
@@ -488,5 +549,5 @@ define config.allow_underfull_grids = True
 # That's why this timer is 1 second long.
 screen finish_animating_achievement(num):
     timer myconfig.ACHIEVEMENT_HIDE_TIME:
-        action [SetDict(onscreen_achievements, num, None), Hide()]
+        action [SetDict(custom_achievements.onscreen_achievements, num, None), Hide()]
 
