@@ -1,10 +1,24 @@
 # Achievements for Ren'Py
 
-Included in these files is a system which wraps the existing achievement code found in Ren'Py to make it easy to declare achievements which you can grant to the player during gameplay.
+Included in these files is a system which wraps the existing achievement code found in Ren'Py to make it easy to declare achievements which you can grant to the player during gameplay. It is also integrated with Steam achievements.
 
 ## Initial Setup
 
 To start, place `achievement_backend.rpy` and `achievements.rpy` into your project's `game/` folder. The code you are concerned with is found in `achievements.rpy` and includes several examples to get started.
+
+If you would like to get Steam achievements working, ensure you have downloaded the latest Steam library package from the Ren'Py launcher via Preferences -> Install Libraries -> Install Steam Support. You must then set up your achievements on the Steam backend using the same IDs you give to the Achievements when you declare them in-game.
+
+You can then create a button to access the default achievement gallery, with code such as:
+
+```py
+textbutton _("Achievements") action ShowMenu("achievement_gallery")
+```
+
+Additionally, there is an example label which demonstrates how to grant achievements and track progress during the game. Jump to it with a line like:
+
+```py
+jump achievement_examples
+```
 
 ## The Achievement Class
 
@@ -42,7 +56,7 @@ The Achievement class takes the following parameters:
     A displayable (usually an image path) which will be used in the gallery when this achievement is locked. If not provided, it defaults to the "locked_achievement" image, which can be found declared in `achievements.rpy`. You can re-declare this to point to whichever image you like.
 
 `stat_max`
-    An integer. If provided, this is used to track progress towards completion of an achievement. Reaching this number means the achievement is completed. So, for example, if you have an achievement for reading all 10 chapters in your game, then `stat_max` would be `10` and you'd use the `progress` or `add_progress` methods (described below) to add progress as the player progresses through the chapters.
+    An integer. If provided, this is used to track progress towards completion of an achievement. Reaching this number means the achievement is completed. So, for example, if you have an achievement for reading all 10 chapters in your game, then `stat_max` would be `10` and you'd use the `add_set_progress`, `progress`, or `add_progress` methods (described below) to add progress as the player progresses through the chapters.
 
 `stat_modulo`
     An integer. This is a bit confusing but perhaps this use case will make it clearer: say you have an achievement which has 300 steps to complete (maybe it's collecting items or it's tracking completion to 100% complete the game). In order to avoid sending progress updates to Steam of 0.3% completion towards the goal, we only want to send an update every time the player gets 1% closer to the goal. In such a case, you'd set `stat_modulo` to `3`, because `300 % 3 = 0` (300 modulo 3 equals 0). When this happens, Ren'Py sends a progress update to Steam.
@@ -51,27 +65,26 @@ The Achievement class takes the following parameters:
 `stat_update_percent`
     A slightly simpler way to understand `stat_modulo`. If, in the previous example where there were 300 things to track on the way to finishing the achievement, you wanted to send an update to Steam every 1%, you would set `stat_update_percent=1`. If you wanted to send it every 5% completion it would instead be `stat_update_percent=5`. Meeting or exceeding the `stat_max` will always grant the achievement regardless of what `stat_modulo` or `stat_update_percent` are, so it doesn't have to be perfectly divisible.
 
-`hidden`
-    If True, both the achievement name and its description are replaced by "???" in the achievement gallery screen. Useful for achievements for which the name and description would be a spoiler.
+`hide_name`
+    If True, the name of this achievement will be set to `myconfig.HIDDEN_ACHIEVEMENT_NAME`. If False, the name of this achievement will be shown normally. This may also be set to a string, in which case it will be used as the name of the achievement until it is unlocked e.g. `hide_name=_("Secret Achievement 1")`
 
 `hide_description`
-    If True, the description will be hidden. This can be used in combination with `hidden` to hide just the name and not the description, or just the description and not the name.
-    `hidden=True, hide_description=False` -> The name is ???, the description is not hidden.
-    `hidden=False, hide_description=True` -> The name is not hidden, the description is ???
-    `hidden=True` -> the name and description are ???
-    You can also set `hide_description` to a string, in which case that string will be shown as the description before the achievement has been granted e.g. `hide_description=_("A certain someone wants to see you...")`
+    If True, the description will be set to `myconfig.HIDDEN_ACHIEVEMENT_DESCRIPTION`. If False, the description of this achievement will be shown normally. You can also set `hide_description` to a string, in which case that string will be shown as the description before the achievement has been granted e.g. `hide_description=_("A certain someone wants to see you...")`
 
 ### Regular Methods
 
 `get_timestamp`
     This method takes one argument, `format`. It should correspond to a [strftime](https://strftime.org/) format, which will be used for the returned timestamp. See `achievements.rpy` for an additional example of how to use this to adjust how the timestamp displays.
 
+`add_set_progress`
+    This is a method unique to the Achievement class, which will let you add unique values to a set tied to this achievement. This will allow you to tally progress towards the achievement while not worrying about duplicates. `stat_max` must be set to use this method. It takes one argument, which should be a unique value to add to the achievement set (usually a string like `"good_end"`). Any given value will only be added to the set once, even if you try to add it multiple times, which makes it a good choice to track unique occurrences of something without worrying about rollback or "double counting".
+    Typically, this looks like `$ ending_achievement.add_set_progress("good_end")`, which would then add 1 to the achievement's progress if `"good_end"` had not previously been in the achievement set. Regardless of how many times `$ ending_achievement.add_set_progress("good_end")` is run, it will only ever count once towards the achievement progress. You can then add other values (e.g. "bad_end", "normal_end" etc.) and once there are `stat_max` unique items added to the set, the achievement will be granted.
+
 `add_progress`
     This method takes one argument, `amount`, which is the amount to add to the progress of the achievement. An achievement must be using `stat_max` for this method to make sense. If the achievement had 3/5 progress, then `sample_achievement.add_progress(1)` would result in it having 4/5 progress.
 
 `progress`
-    This method takes one argument, `complete`, which is the number the progress for this achievement will be *set* to. Unlike `add_progress`, it does not add progress, merely sets it to the provided number. So, if an achievement had 2/5 progress, then `sample_achievement.progress(3)` would set it to 3/5 progress, since progress was set to 3.
-    This can be most useful if you're using something like, say, a persistent set to keep track of endings. You can plug the length of the set into the `progress` method to prevent double-counting progress points e.g. `endings_achievement.progress(len(persistent.all_endings))`.
+    This method takes one argument, `complete`, which is the number the progress for this achievement will be *set* to. Unlike `add_progress`, it does not add progress, merely sets it to the provided number. So, if an achievement had 2/5 progress, then `sample_achievement.progress(3)` would set it to 3/5 progress, since progress was set to 3. Note that it will not revert progress - if you set progress to a number lower than the last recorded progress, it will remain at the higher progress amount.
 
 `clear`
     This method will clear this achievement from the list of unlocked achievements. Best used for testing. It takes no arguments. e.g. `sample_achievement.clear()`
@@ -107,7 +120,7 @@ The Achievement class takes the following parameters:
     This is the screen language equivalent of the `grant` method. It does not take any arguments e.g. `action sample_achievement.Grant()`
 
 `Toggle`
-    This is a special method intended to be used for testing. If an achievement has been granted, clicking a button with this Toggle method will clear it from the unlocked achievements. If it has not been granted, clicking the button will grant it. e.g. `sample_achievement.Toggle()`
+    This is a special method intended to be used for testing. If an achievement has been granted, clicking a button with this Toggle method will clear it from the unlocked achievements. If it has not been granted, clicking the button will grant it. e.g. `action sample_achievement.Toggle()`
 
 `Reset`
     This is a special method which can be used to reset the progress of all achievements at once. It is a class method, and is thus always called like `action Achievement.Reset()`.
@@ -134,6 +147,12 @@ Besides the Achievement class, there are a few configuration values you can set 
 
 `myconfig.ACHIEVEMENT_CHANNEL`
     By default, the achievement sound effect is set to play on the `audio` channel. You can set this to the string name of another channel to play on that channel instead.
+
+`myconfig.HIDDEN_ACHIEVEMENT_NAME`
+    This is the text that will be shown as the name of an achievement where `hide_name=True`. By default it is `_("???")`
+
+`myconfig.HIDDEN_ACHIEVEMENT_DESCRIPTION`
+    This is the text that will be shown as the description of an achievement where `hide_description=True`. By default, it is `_("???")`
 
 `achievement.steam_position`
     This is a configuration value provided by Ren'Py itself. It will set the position of the Steam popup and can be set to one of: `"top_left"`, `"top_right"`, `"bottom_left"`, or `"bottom_right"`. If you are using the built-in achievement popups of this system alongside Steam's, you may want to set this to ensure the popups do not appear in the same location.
@@ -166,4 +185,4 @@ In this example, `all_endings_achievement` is the ID of the achievement which wi
 
 ## Final Notes
 
-You can check out my website, https://feniksdev.com for more Ren'Py tutorials, and subscribe to feniksdev.itch.io so you don't miss out on future Ren'Py tool releases!
+You can check out my website, https://feniksdev.com for more Ren'Py tutorials, and subscribe to [feniksdev.itch.io](https://feniksdev.itch.io/) so you don't miss out on future Ren'Py tool releases!
