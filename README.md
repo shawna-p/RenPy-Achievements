@@ -4,7 +4,7 @@ Included in these files is a system which wraps the existing achievement code fo
 
 ## Initial Setup
 
-To start, place `achievement_backend.rpy` and `achievements.rpy` into your project's `game/` folder. The code you are concerned with is found in `achievements.rpy` and includes several examples to get started.
+To start, place `achievement_backend.rpy` and `achievements.rpy` into your project's `game/` folder. I recommend putting `achievement_backend.rpy` inside your `game/libs/` folder in particular. The code you are concerned with modifying is found in `achievements.rpy` and includes several examples to get started.
 
 If you would like to get Steam achievements working, ensure you have downloaded the latest Steam library package from the Ren'Py launcher via Preferences -> Install Libraries -> Install Steam Support. You must then set up your achievements on the Steam backend using the same IDs you give to the Achievements when you declare them in-game.
 
@@ -59,11 +59,14 @@ The Achievement class takes the following parameters:
     An integer. If provided, this is used to track progress towards completion of an achievement. Reaching this number means the achievement is completed. So, for example, if you have an achievement for reading all 10 chapters in your game, then `stat_max` would be `10` and you'd use the `add_set_progress`, `progress`, or `add_progress` methods (described below) to add progress as the player progresses through the chapters.
 
 `stat_modulo`
-    An integer. This is a bit confusing but perhaps this use case will make it clearer: say you have an achievement which has 300 steps to complete (maybe it's collecting items or it's tracking completion to 100% complete the game). In order to avoid sending progress updates to Steam of 0.3% completion towards the goal, we only want to send an update every time the player gets 1% closer to the goal. In such a case, you'd set `stat_modulo` to `3`, because `300 % 3 = 0` (300 modulo 3 equals 0). When this happens, Ren'Py sends a progress update to Steam.
+    An integer. The name is a bit opaque but perhaps this use case will make it clearer: say you have an achievement which has 400 steps to complete (maybe it's collecting items or it's tracking completion to 100% complete the game). You want to show a popup that the player has progressed 25%, 50%, 75% towards getting all 400 items. In such a case, you'd set `stat_modulo` to `100`, because `400/4=100` and it will cause progress to be reported any time `progress % 100 = 0` (progress modulo 100 equals 0). When this happens, Ren'Py tells Steam to indicate the player's progress towards this achievement.
     If this sounds confusing, I recommend the next property instead.
 
 `stat_update_percent`
-    A slightly simpler way to understand `stat_modulo`. If, in the previous example where there were 300 things to track on the way to finishing the achievement, you wanted to send an update to Steam every 1%, you would set `stat_update_percent=1`. If you wanted to send it every 5% completion it would instead be `stat_update_percent=5`. Meeting or exceeding the `stat_max` will always grant the achievement regardless of what `stat_modulo` or `stat_update_percent` are, so it doesn't have to be perfectly divisible.
+    A slightly simpler way to understand `stat_modulo`. If, in the previous example where there were 400 things to track on the way to finishing the achievement, you wanted to show a progress indicator every 25%, you would set `stat_update_percent=25`. If you wanted to send it every 10% completion it would instead be `stat_update_percent=10`. Meeting or exceeding the `stat_max` will always grant the achievement regardless of what `stat_modulo` or `stat_update_percent` are, so it doesn't have to be perfectly divisible (or you can leave it at 0 to only show an indicator when the achievement is granted).
+
+`stat_id`
+    If you have set up your achievements on Steam's backend, you can create stats to track information like progress towards an achievement. If you have created a stat and added it to your achievement as a Progress Stat in Steam's backend, you can also add the stat's API name here as a string. When the achievement is progressed, progress for the associated stat will also be reported to Steam. If your game is not connected to Steam, leave this as None.
 
 `hide_name`
     If True, the name of this achievement will be set to `myconfig.HIDDEN_ACHIEVEMENT_NAME`. If False, the name of this achievement will be shown normally. This may also be set to a string, in which case it will be used as the name of the achievement until it is unlocked e.g. `hide_name=_("Secret Achievement 1")`

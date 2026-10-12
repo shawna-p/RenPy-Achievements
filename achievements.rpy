@@ -1,6 +1,6 @@
 ################################################################################
 ##
-## Achievements for Ren'Py by Feniks (feniksdev.itch.io / feniksdev.com) v1.5
+## Achievements for Ren'Py by Feniks (feniksdev.itch.io / feniksdev.com) v1.6
 ##
 ################################################################################
 ## This file contains code for an achievement system in Ren'Py. It is designed
@@ -51,7 +51,8 @@ define myconfig.INGAME_POPUP_WITH_STEAM = True
 define myconfig.ACHIEVEMENT_HIDE_TIME = 1.0
 ## True if the game should show in-game achievement popups when an
 ## achievement is earned. You can set this to False if you just want an
-## achievement gallery screen and don't want any popups.
+## achievement gallery screen (or just easy Steam compatibility)
+## and don't want any popups.
 define myconfig.SHOW_ACHIEVEMENT_POPUPS = True
 ## This can be set to a sound that plays when the achievement popup appears.
 ## None does not play a sound.
@@ -64,6 +65,9 @@ define myconfig.ACHIEVEMENT_CHANNEL = "audio"
 ## you provide a more specific one. See the examples below for how to do so.
 define myconfig.HIDDEN_ACHIEVEMENT_NAME = _("???{#hidden_achievement_name}")
 define myconfig.HIDDEN_ACHIEVEMENT_DESCRIPTION = _("???{#hidden_achievement_description}")
+## How timestamps are formatted for achievements, by default.
+## See https://strftime.org/ for formatting
+define myconfig.DEFAULT_TIMESTAMP_FORMAT = _("%b %d, %Y @ %I:%M %p{#achievement_timestamp}")
 
 ## A callback, or list of callbacks, which are called when an achievement
 ## is granted. It is called with one argument, the achievement which
@@ -142,19 +146,25 @@ define progress_achievement = Achievement(
     ## chapters the player has completed which unlocks when they have seen all
     ## the chapters.
     stat_max=12,
-    ## You can also provide a stat_modulo, which means the achievement is only
-    ## updated in the Steam backend every time the stat reaches a multiple of
+    ## You can also provide a stat_modulo, which means the achievement will show
+    ## a progress indicator on Steam every time the stat reaches a multiple of
     ## the modulo.
     ## Alternatively, this system also lets you set stat_update_percent instead,
     ## so if you want it to update every 10% it progresses, you can set
-    # stat_update_percent=10
+    # stat_update_percent=10,
     ## This is most useful for achievements with a large number of steps,
     ## like a general % completion achievement. Maybe there are 600 things to
     ## complete for the achievement, but obviously 0.1% increments are pretty
-    ## meaningless so you can either set stat_modulo=6 or stat_update_percent=1
-    ## and it will update Steam every 6 steps or every 1%.
+    ## meaningless so you can either set stat_modulo=60 or stat_update_percent=10
+    ## and it will show progress every 60 steps or every 10%.
     ## The in-game bar/numbers will still update every increase.
     ##
+    ## If your game is using the Steam backend, you can register a stat on
+    ## Steamworks to associate with this achievement. This should be the same
+    ## as the API Name of the stat on Steam's backend. If this is set, and
+    ## Steam is detected, then the stat will be updated when progress is made
+    ## towards this achievement.
+    stat_id='progress_achievement_stat',
     ## This shows the progress bar in the gallery. This is True by default if
     ## you have a stat_max, but you can set it to False if you don't want to
     ## show a bar (but do want to track progress).
@@ -488,8 +498,9 @@ screen achievement_gallery():
                     text a.description
                     if a.has():
                         ## There are two ways to display the timestamp. The
-                        ## first is automatically formatted like
+                        ## first is automatically formatted like:
                         ## Unlocked Sep 14, 2023 @ 6:45 PM
+                        ## It uses the format in myconfig.DEFAULT_TIMESTAMP_FORMAT
                         text a.timestamp size 22
                         ## If you want to format it yourself, you can use
                         ## the get_timestamp method:

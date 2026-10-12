@@ -1,6 +1,6 @@
 ################################################################################
 ##
-## Achievements for Ren'Py by Feniks (feniksdev.itch.io / feniksdev.com) v1.5
+## Achievements for Ren'Py by Feniks (feniksdev.itch.io / feniksdev.com) v1.6
 ##
 ################################################################################
 ## This file contains code for an achievement system in Ren'Py. It is designed
@@ -18,7 +18,7 @@
 ################################################################################
 init -500 python in custom_achievements:
     import datetime, time
-    from store import achievement, persistent, SelectedIf, If, Function, myconfig, config
+    from store import achievement, persistent, SelectedIf, If, Function, myconfig, config, _strftime
     from re import sub as re_sub
 
     TAG_ALPHABET = "abcdefghijklmnopqrstuvwxyz"
@@ -71,6 +71,9 @@ init -500 python in custom_achievements:
             game progress stat, you only wanted to show updates every time the
             player got through a quarter of the chapters. In this case,
             stat_modulo would be 6 (24//4).
+        stat_id : string
+            The ID of the stat associated with this achievement on Steam's
+            backend. Should only include letters, numbers, and underscores.
         hide_name : bool
             True if this achievement's name should be hidden. May also be set to
             a string, which will be shown as the name before the achievement
@@ -104,7 +107,7 @@ init -500 python in custom_achievements:
         def __init__(self, name, id=None, description=None, unlocked_image=None,
                 locked_image=None, stat_max=None, stat_modulo=None, hidden=False,
                 stat_update_percent=1, hide_description=None,
-                hide_name=None, **kwargs):
+                hide_name=None, stat_id=None, **kwargs):
 
             self._name = name
             # Try to sanitize the name for an id, if possible
@@ -123,6 +126,9 @@ init -500 python in custom_achievements:
                 ## Basically, if stat_max % stat_modulo == 0, then it updates.
                 ## So if it updates every 10%, then stat_max / stat_modulo = 10
                 self.stat_modulo = int(stat_max * (stat_update_percent / 100.0))
+            self.stat_id = stat_id
+            if self.stat_id and not self.stat_max:
+                raise Exception("Achievement {} has a stat_id, but no stat_max is set.".format(self.name))
 
 
             self.hidden = hidden
@@ -147,14 +153,16 @@ init -500 python in custom_achievements:
             achievement.register(self.id, stat_max=stat_max,
                 stat_modulo=stat_modulo or None)
 
-        def get_timestamp(self, format="%b %d, %Y @ %I:%M %p"):
+        def get_timestamp(self, format=None):
             """
             Return the timestamp when this achievement was granted,
             using the provided string format.
             """
+            if format is None:
+                format = myconfig.DEFAULT_TIMESTAMP_FORMAT
             if self.has():
-                return datetime.datetime.fromtimestamp(
-                    self._timestamp).strftime(format)
+                format = renpy.translation.translate_string(format)
+                return _strftime(format, time.localtime(self._timestamp))
             else:
                 return ""
 
@@ -175,8 +183,7 @@ init -500 python in custom_achievements:
                     if config.developer:
                         print("WARNING: Could not find timestamp for achievement with ID {}".format(self.id))
                     return ""
-                return __("Unlocked ") + ts.strftime(__(
-                    "%b %d, %Y @ %I:%M %p{#achievement_timestamp}"))
+                return __("Unlocked %s{#achievement_unlock_timestamp}") % self.get_timestamp()
             else:
                 return ""
 
@@ -265,6 +272,16 @@ init -500 python in custom_achievements:
             """Return this achievement's progress."""
             return achievement.get_progress(self.id)
 
+        def granted_callbacks(self):
+            """Run standard code after an achievement has been granted."""
+            # First time this was granted
+            self.achievement_popup()
+            # Save the timestamp
+            self._timestamp = time.time()
+            # Callback
+            if myconfig.ACHIEVEMENT_CALLBACK is not None:
+                renpy.run(myconfig.ACHIEVEMENT_CALLBACK, self)
+
         def grant(self):
             """
             Grant the player this achievement, and show a popup if this is
@@ -273,13 +290,7 @@ init -500 python in custom_achievements:
             has_achievement = self.has()
             x = achievement.grant(self.id)
             if not has_achievement:
-                # First time this was granted
-                self.achievement_popup()
-                # Save the timestamp
-                self._timestamp = time.time()
-                # Callback
-                if myconfig.ACHIEVEMENT_CALLBACK is not None:
-                    renpy.run(myconfig.ACHIEVEMENT_CALLBACK, self)
+                self.granted_callbacks()
             # Double check achievement sync
             achievement.sync()
             return x
@@ -295,14 +306,16 @@ init -500 python in custom_achievements:
             """
             has_achievement = self.has()
             x = achievement.progress(self.id, complete)
+            ## Update the associated Steam stat, if it exists.
+            if self.stat_id and achievement.steam:
+                prog = self.get_progress(name)
+                if isinstance(prog, int):
+                    achievement.steam.set_int_stat(self.stat_id, prog)
+                else:
+                    achievement.steam.set_float_stat(self.stat_id, prog)
+                achievement.steam.store_stats()
             if not has_achievement and self.has():
-                # First time this was granted
-                self.achievement_popup()
-                # Save the timestamp
-                self._timestamp = time.time()
-                # Callback
-                if myconfig.ACHIEVEMENT_CALLBACK is not None:
-                    renpy.run(myconfig.ACHIEVEMENT_CALLBACK, self)
+                self.granted_callbacks()
             return x
 
         def achievement_popup(self):
@@ -494,6 +507,38 @@ init -500 python in custom_achievements:
                         fa.grant()
             return
 
+    def merge_achievement_timestamp(old, new, current):
+        """Merge persistent data for timestamps."""
+        ## This is a dict of id : timestamp
+        if not isinstance(old, dict):
+            old = dict()
+        if not isinstance(new, dict):
+            new = dict()
+        current.update(old)
+        current.update(new)
+        return current
+
+    def merge_achievement_sets(old, new, current):
+        """Merge persistent data for achievement sets."""
+        ## These are structured as a dict with ID : set() where ID is
+        ## the achievement ID and set() has unique set items.
+        if not isinstance(old, dict):
+            old = dict()
+        if not isinstance(new, dict):
+            new = dict()
+        all_keys = set(old.keys()).union(set(new.keys()))
+        for key in all_keys:
+            if key not in current:
+                current[key] = set()
+            if key in old:
+                current[key] = current[key] | old[key]
+            if key in new:
+                current[key] = current[key] | new[key]
+        return current
+
+    renpy.register_persistent('achievement_timestamp', merge_achievement_timestamp)
+    renpy.register_persistent('achievement_sets', merge_achievement_sets)
+
 ## Note: DO NOT change these configuration values in this block! See
 ## `achievements.rpy` for how to change them. This is just for setup so they
 ## exist in the game, and then you can modify them with `define` in a different
@@ -526,6 +571,8 @@ init -999 python in myconfig:
     ## is hidden.
     HIDDEN_ACHIEVEMENT_NAME = _("???{#hidden_achievement_name}")
     HIDDEN_ACHIEVEMENT_DESCRIPTION = _("???{#hidden_achievement_description}")
+    ## How timestamps are formatted for achievements, by default.
+    DEFAULT_TIMESTAMP_FORMAT = _("%b %d, %Y @ %I:%M %p{#achievement_timestamp}")
 
 ## Track the time each achievement was earned at
 default persistent.achievement_timestamp = dict()
