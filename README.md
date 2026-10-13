@@ -59,7 +59,7 @@ The Achievement class takes the following parameters:
     An integer. If provided, this is used to track progress towards completion of an achievement. Reaching this number means the achievement is completed. So, for example, if you have an achievement for reading all 10 chapters in your game, then `stat_max` would be `10` and you'd use the `add_set_progress`, `progress`, or `add_progress` methods (described below) to add progress as the player progresses through the chapters.
 
 `stat_modulo`
-    An integer. The name is a bit opaque but perhaps this use case will make it clearer: say you have an achievement which has 400 steps to complete (maybe it's collecting items or it's tracking completion to 100% complete the game). You want to show a popup that the player has progressed 25%, 50%, 75% towards getting all 400 items. In such a case, you'd set `stat_modulo` to `100`, because `400/4=100` and it will cause progress to be reported any time `progress % 100 = 0` (progress modulo 100 equals 0). When this happens, Ren'Py tells Steam to indicate the player's progress towards this achievement.
+    An integer. The name is a bit opaque but perhaps this use case will make it clearer: say you have an achievement which has 400 steps to complete (maybe it's collecting items or it's tracking completion to 100% complete the game). You want to show a popup that the player has progressed 25%, 50%, 75% towards getting all 400 items. In such a case, you'd set `stat_modulo` to `100`, because `400/4=100` and it will cause progress to be reported any time `progress % 100 = 0` (progress modulo 100 equals 0). When this happens, Ren'Py tells Steam to indicate the player's progress towards this achievement. If left blank, players will receive a progress indicator whenever the progress is updated.
     If this sounds confusing, I recommend the next property instead.
 
 `stat_update_percent`
@@ -156,6 +156,9 @@ Besides the Achievement class, there are a few configuration values you can set 
 
 `myconfig.HIDDEN_ACHIEVEMENT_DESCRIPTION`
     This is the text that will be shown as the description of an achievement where `hide_description=True`. By default, it is `_("???")`
+
+`myconfig.DEFAULT_TIMESTAMP_FORMAT`
+    This is the default format for timestamps. See https://strftime.org/ for formatting. By default, it is `_("%b %d, %Y @ %I:%M %p{#achievement_timestamp}")`
 
 `achievement.steam_position`
     This is a configuration value provided by Ren'Py itself. It will set the position of the Steam popup and can be set to one of: `"top_left"`, `"top_right"`, `"bottom_left"`, or `"bottom_right"`. If you are using the built-in achievement popups of this system alongside Steam's, you may want to set this to ensure the popups do not appear in the same location.

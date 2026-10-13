@@ -307,7 +307,7 @@ init -500 python in custom_achievements:
             has_achievement = self.has()
             x = achievement.progress(self.id, complete)
             ## Update the associated Steam stat, if it exists.
-            if self.stat_id and achievement.steam:
+            if self.stat_id and achievement.steam and not has_achievement:
                 prog = self.get_progress(name)
                 if isinstance(prog, int):
                     achievement.steam.set_int_stat(self.stat_id, prog)
